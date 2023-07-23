@@ -1,0 +1,80 @@
+/* styles.css */
+
+/* Form container */
+#login-form {
+    max-width: 400px;
+    margin: 0 auto;
+    padding: 30px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    background-color: #f8f8f8;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+}
+
+/* Form header */
+#login-form h2 {
+    font-size: 28px;
+    font-weight: bold;
+    margin-bottom: 30px;
+    text-align: center;
+    color: #333;
+}
+
+/* Form fields */
+#login-form label {
+    display: block;
+    margin-bottom: 10px;
+    font-weight: bold;
+    color: #555;
+}
+
+#login-form input[type="text"],
+#login-form input[type="password"] {
+    width: 100%;
+    padding: 12px;
+    margin-bottom: 20px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}
+
+/* Submit button */
+#login-form input[type="submit"] {
+    display: block;
+    width: 100%;
+    padding: 14px;
+    background-color: #4CAF50;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: bold;
+    letter-spacing: 1px;
+    transition: background-color 0.3s ease;
+}
+
+#login-form input[type="submit"]:hover {
+    background-color: #45a049;
+}
+
+/* Error message */
+.error {
+    color: #ff0000;
+    font-size: 14px;
+    margin-top: 10px;
+}
+
+/* Additional styles */
+#login-form p {
+    text-align: center;
+    margin-top: 10px;
+}
+
+#login-form a {
+    color: #4CAF50;
+    text-decoration: none;
+}
+
+#login-form a:hover {
+    text-decoration: underline;
+}

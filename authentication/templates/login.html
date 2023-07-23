@@ -1,0 +1,27 @@
+{% load static %}
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Login</title>
+    <link rel="stylesheet" type="text/css" href="{% static 'authentication/styles.css' %}">
+</head>
+<body>
+
+<div id="login-form">
+    <form method="post">
+        {% csrf_token %}
+
+        {{ form.as_p }}
+
+        <input type="submit" value="Login">
+    </form>
+
+    {% if form.non_field_errors %}
+        <div class="error">{{ form.non_field_errors }}</div>
+    {% endif %}
+
+    <p><a href="#">Forgot Password?</a></p>
+</div>
+
+</body>
+</html>
