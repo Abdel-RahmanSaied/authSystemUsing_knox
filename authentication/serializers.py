@@ -66,3 +66,13 @@ class UserSerializer(serializers.ModelSerializer):
         validated_data.pop('password', None)
         user = super().update(instance, validated_data)
         return user
+
+
+class PasswordResetSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+
+    def validate(self, attrs):
+        email = attrs.get('email')
+        if not USER.objects.filter(email=email).exists():
+            raise serializers.ValidationError({'email': 'User with this email address does not exist.'})
+        return attrs

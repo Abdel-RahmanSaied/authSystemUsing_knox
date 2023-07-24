@@ -16,12 +16,17 @@ from knox.settings import knox_settings
 
 # import login view from knox
 from knox.views import LoginView as KnoxLoginView
-from .serializers import LoginSerializer, UserSerializer
-from .models import USER
+from .serializers import LoginSerializer, UserSerializer, PasswordResetSerializer
+from .models import USER, PasswordReset
 from .permissions import UserPermission
 
 from django.contrib.auth import get_user_model
 # print("get_user_model()", get_user_model())
+
+from django.utils.crypto import get_random_string
+from django.core.mail import send_mail
+from datetime import timedelta
+from django.utils import timezone
 
 # forms
 from .forms import AdvancedLoginForm
@@ -61,7 +66,6 @@ class LoginView(KnoxLoginView):
                 return render(request, 'login.html', {'form': self.form(request.POST)})
             else:
                 return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
 
     def get(self, request, format=None):
         if 'text/html' in request.META.get('HTTP_ACCEPT', ''):  # Check if HTML response is requested
@@ -109,20 +113,48 @@ class UserViewSet(viewsets.ModelViewSet):
     ordering_fields = ('username', 'email', 'first_name', 'last_name', 'phone', 'job_tittle', 'department',
                        'organization', 'country',)
 
-    # def create(self, request, *args, **kwargs):
-    #     serializer = self.get_serializer(data=request.data)
-    #     serializer.is_valid(raise_exception=True)
-    #     user = serializer.save()
-    #     headers = self.get_success_headers(serializer.data)
-    #     token = Token.objects.get(user=user)
-    #     data = serializer.data
-    #     data['token'] = token.key
-    #     return Response(data, status=status.HTTP_201_CREATED, headers=headers)
 
 
-class testRefresh(APIView):
-    authentication_classes = (TokenAuthentication,)
-    permission_classes = (IsAuthenticated,)
+class PasswordResetViewSet(viewsets.ViewSet):
+    serializer_class = PasswordResetSerializer
+    def create(self, request):
+        serializer = self.serializer_class(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        email = serializer.validated_data['email']
+        print("email", email)
 
-    def get(self, request, format=None):
-        return Response({"Message": "Token is valid"}, status=status.HTTP_200_OK)
+        try:
+            user = USER.objects.get(email=email)
+        except USER.DoesNotExist:
+            return Response({'error': 'User with this email address does not exist.'}, status=status.HTTP_404_NOT_FOUND)
+
+        # Create a password reset instance
+        token = get_random_string(length=32)
+        password_reset = PasswordReset.objects.create(user=user, token=token)
+
+        # Send password reset email
+        reset_link = f"https://yourdomain.com/reset-password/{token}/"
+        send_mail(
+            'Password Reset Request',
+            f'Click the link to reset your password: {reset_link}',
+            'testDevAcc20@outlook.com',
+            [email],
+            fail_silently=False,
+        )
+
+        return Response({'message': 'Password reset email sent.'}, status=status.HTTP_200_OK)
+
+    def retrieve(self, request, token=None):
+        try:
+            password_reset = PasswordReset.objects.get(token=token)
+        except PasswordReset.DoesNotExist:
+            return Response({'error': 'Invalid or expired token.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Check if the token is still valid (e.g., not expired)
+        expiration_time = password_reset.created_at + timedelta(hours=1)  # Token expires after 1 hour
+        if timezone.now() > expiration_time:
+            return Response({'error': 'Token has expired.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Handle password reset confirmation and set new password for the user
+
+        return Response({'message': 'Password reset successful.'}, status=status.HTTP_200_OK)

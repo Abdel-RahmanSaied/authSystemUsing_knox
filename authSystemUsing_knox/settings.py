@@ -174,3 +174,11 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 AUTHENTICATION_BACKENDS = ['authentication.backends.EmailAuthBackend']
 AUTH_USER_MODEL = 'authentication.USER'
 
+# EMAIL SETTINGS
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.office365.com'
+EMAIL_HOST_USER = 'testDevAcc20@outlook.com'
+EMAIL_HOST_PASSWORD = '!qaz@wsx#edc$rfv'
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+DEFAULT_FROM_EMAIL = 'testDevAcc20@outlook.com'

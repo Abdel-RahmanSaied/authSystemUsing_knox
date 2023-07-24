@@ -68,6 +68,12 @@ class USER(AbstractBaseUser, PermissionsMixin):
         verbose_name_plural = 'Users'
 
 
+class PasswordReset(models.Model):
+    user = models.ForeignKey(USER, on_delete=models.CASCADE)
+    token = models.CharField(max_length=255)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
 # @receiver(post_save, sender=settings.AUTH_USER_MODEL)
 # def create_auth_token(sender, instance=None, created=False, **kwargs):
 #     if created:
