@@ -7,7 +7,7 @@ __pycache__/
 *.sqlite3
 # C extensions
 *.so
-*/maigrations
+*/maigrations/*
 *.xml
 # Distribution / packaging
 .Python
