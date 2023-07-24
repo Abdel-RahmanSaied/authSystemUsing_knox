@@ -133,7 +133,10 @@ class PasswordResetViewSet(viewsets.ViewSet):
         password_reset = PasswordReset.objects.create(user=user, token=token)
 
         # Send password reset email
-        reset_link = f"https://yourdomain.com/reset-password/{token}/"
+        # reset_link = f"https://yourdomain.com/reset-password/{token}/"
+        reset_link = f"""are u ready to reset your password? use this link :
+        http://localhost:8000/reset-password/{token}/
+        """
         send_mail(
             'Password Reset Request',
             f'Click the link to reset your password: {reset_link}',
