@@ -1,13 +1,16 @@
+import datetime
+
 from django.db import models
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
 from django.db.models.signals import post_save
 from django.conf import settings
 from django.dispatch import receiver
-# from rest_framework.authtoken.models import Token
 from django.urls import reverse
 # from django_rest_passwordreset.signals import reset_password_token_created
 # from django.core.mail import send_mail
 from django.utils.translation import gettext_lazy as _
+from dateutil.relativedelta import relativedelta
+
 
 
 # Create your models here.
@@ -72,6 +75,10 @@ class PasswordReset(models.Model):
     user = models.ForeignKey(USER, on_delete=models.CASCADE)
     token = models.CharField(max_length=255)
     created_at = models.DateTimeField(auto_now_add=True)
+    expire_at = models.DateTimeField(default=datetime.datetime.now() + relativedelta(hours=1))
+
+    def __str__(self):
+        return self.user.email
 
 
 # @receiver(post_save, sender=settings.AUTH_USER_MODEL)

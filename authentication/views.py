@@ -19,6 +19,7 @@ from knox.views import LoginView as KnoxLoginView
 from .serializers import LoginSerializer, UserSerializer, PasswordResetSerializer
 from .models import USER, PasswordReset
 from .permissions import UserPermission
+from .emailSender import send_passwordreset_verification_mail
 
 from django.contrib.auth import get_user_model
 # print("get_user_model()", get_user_model())
@@ -114,14 +115,17 @@ class UserViewSet(viewsets.ModelViewSet):
                        'organization', 'country',)
 
 
-
-class PasswordResetViewSet(viewsets.ViewSet):
+class PasswordResetViewSet(viewsets.ModelViewSet):
+    queryset = PasswordReset.objects.all()
     serializer_class = PasswordResetSerializer
+    permission_classes = [AllowAny]
+    lookup_field = 'token'
+
+
     def create(self, request):
         serializer = self.serializer_class(data=request.data)
         serializer.is_valid(raise_exception=True)
         email = serializer.validated_data['email']
-        print("email", email)
 
         try:
             user = USER.objects.get(email=email)
@@ -133,17 +137,9 @@ class PasswordResetViewSet(viewsets.ViewSet):
         password_reset = PasswordReset.objects.create(user=user, token=token)
 
         # Send password reset email
-        # reset_link = f"https://yourdomain.com/reset-password/{token}/"
-        reset_link = f"""are u ready to reset your password? use this link :
-        http://localhost:8000/reset-password/{token}/
-        """
-        send_mail(
-            'Password Reset Request',
-            f'Click the link to reset your password: {reset_link}',
-            'testDevAcc20@outlook.com',
-            [email],
-            fail_silently=False,
-        )
+        reset_link = request.build_absolute_uri(f"/auth/password-reset/{token}/")
+
+        send_passwordreset_verification_mail(user, reset_link, token)
 
         return Response({'message': 'Password reset email sent.'}, status=status.HTTP_200_OK)
 

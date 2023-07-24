@@ -3,6 +3,7 @@ from django.contrib.auth import authenticate
 from django.contrib.auth import get_user_model
 from django.utils.translation import gettext_lazy as _
 from .validators import ValidationError
+from .models import PasswordReset
 from django.contrib.auth.password_validation import validate_password
 
 USER = get_user_model()
@@ -72,9 +73,13 @@ class UserSerializer(serializers.ModelSerializer):
 
 class PasswordResetSerializer(serializers.Serializer):
     email = serializers.EmailField()
+    class Meta:
+        model = PasswordReset
+        fields = ('email',)
 
     def validate(self, attrs):
         email = attrs.get('email')
         if not USER.objects.filter(email=email).exists():
             raise serializers.ValidationError({'email': 'User with this email address does not exist.'})
         return attrs
+
