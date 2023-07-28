@@ -9,25 +9,42 @@ from django.contrib.auth.password_validation import validate_password
 USER = get_user_model()
 
 
-class LoginSerializer(serializers.Serializer):
-    username = serializers.CharField(required=False, allow_blank=True)
-    email = serializers.EmailField(required=False, allow_blank=True)
-    password = serializers.CharField(style={'input_type': 'password'})
+class AuthTokenSerializer(serializers.Serializer):
+    username = serializers.CharField(
+        label=_("Username"),
+        write_only=True
+    )
+    password = serializers.CharField(
+        label=_("Password"),
+        style={'input_type': 'password'},
+        trim_whitespace=False,
+        write_only=True
+    )
+    token = serializers.CharField(
+        label=_("Token"),
+        read_only=True
+    )
 
-    def validate(self, data):
-        username = data.get('username')
-        email = data.get('email')
-        password = data.get('password')
+    def validate(self, attrs):
+        username = attrs.get('username')
+        password = attrs.get('password')
 
-        if not username and not email:
-            raise serializers.ValidationError(_('Username or email is required.'))
+        if username and password:
+            user = authenticate(request=self.context.get('request'),
+                                username=username, password=password)
 
-        # Authenticate user with provided username/email and password
-        user = authenticate(username=username, email=email, password=password)
-        if user is None:
-            raise ValidationError(detail=_('Invalid credentials.'), code='authorization')
-        data['user'] = user
-        return data
+            # The authenticate call simply returns None for is_active=False
+            # users. (Assuming the default ModelBackend authentication
+            # backend.)
+            if not user:
+                msg = _('Unable to log in with provided credentials.')
+                raise ValidationError(msg, code='authorization')
+        else:
+            msg = _('Must include "username" and "password".')
+            raise ValidationError(msg, code='authorization')
+
+        attrs['user'] = user
+        return attrs
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -71,15 +88,51 @@ class UserSerializer(serializers.ModelSerializer):
         return user
 
 
-class PasswordResetSerializer(serializers.Serializer):
-    email = serializers.EmailField()
+# class PasswordResetSerializer(serializers.Serializer):
+#     email = serializers.EmailField(write_only=True)
+#
+#     class Meta:
+#         fields = ('email',)
+#
+#     def validate(self, attrs):
+#         email = attrs.get('email')
+#         try:
+#             user = USER.objects.get(email=email)
+#         except USER.DoesNotExist:
+#             raise serializers.ValidationError({'email': 'User with this email address does not exist.'})
+#
+#         attrs['user'] = user
+#         return attrs
+
+class PasswordResetCreateSerializer(serializers.Serializer):
+    email = serializers.EmailField(write_only=True)
+
     class Meta:
-        model = PasswordReset
         fields = ('email',)
 
     def validate(self, attrs):
         email = attrs.get('email')
-        if not USER.objects.filter(email=email).exists():
+        try:
+            user = USER.objects.get(email=email)
+        except USER.DoesNotExist:
             raise serializers.ValidationError({'email': 'User with this email address does not exist.'})
+        attrs['user'] = user
         return attrs
 
+
+class PasswordResetConfirmSerializer(serializers.Serializer):
+    new_password = serializers.CharField(write_only=True, style={'input_type': 'password'})
+    confirm_password = serializers.CharField(write_only=True, style={'input_type': 'password'})
+
+    def validate(self, attrs):
+        new_password = attrs.get('new_password')
+        confirm_password = attrs.get('confirm_password')
+
+        if new_password != confirm_password:
+            raise serializers.ValidationError({'confirm_password': 'Passwords do not match.'})
+
+        return attrs
+
+    def validate_new_password(self, value):
+        validate_password(value)
+        return value

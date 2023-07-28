@@ -8,7 +8,10 @@ from rest_framework.serializers import DateTimeField
 from rest_framework.settings import api_settings
 from rest_framework.views import APIView
 from rest_framework import viewsets
-from rest_framework.authtoken.serializers import AuthTokenSerializer
+from rest_framework.decorators import action
+from rest_framework.throttling import UserRateThrottle
+
+# from rest_framework.authtoken.serializers import AuthTokenSerializer
 
 from knox.auth import TokenAuthentication
 from knox.models import AuthToken
@@ -16,7 +19,9 @@ from knox.settings import knox_settings
 
 # import login view from knox
 from knox.views import LoginView as KnoxLoginView
-from .serializers import LoginSerializer, UserSerializer, PasswordResetSerializer
+from .serializers import UserSerializer, AuthTokenSerializer, PasswordResetCreateSerializer, \
+    PasswordResetConfirmSerializer
+
 from .models import USER, PasswordReset
 from .permissions import UserPermission
 from .emailSender import send_passwordreset_verification_mail
@@ -29,8 +34,11 @@ from django.core.mail import send_mail
 from datetime import timedelta
 from django.utils import timezone
 
+import secrets
+
 # forms
 from .forms import AdvancedLoginForm
+
 
 
 class LoginView(KnoxLoginView):
@@ -59,7 +67,7 @@ class LoginView(KnoxLoginView):
 
             print(request.META.get('HTTP_ACCEPT', ''))
             token_ttl = self.get_token_ttl()
-            instance, token = AuthToken.objects.create(user, token_ttl)
+            instance, token = AuthToken.objects.create(user)
             user_logged_in.send(sender=user.__class__, request=request, user=user)
             return Response({"token": token}, status=status.HTTP_201_CREATED)
         else:
@@ -115,45 +123,108 @@ class UserViewSet(viewsets.ModelViewSet):
                        'organization', 'country',)
 
 
+# class PasswordResetViewSet(viewsets.ModelViewSet):
+#     queryset = PasswordReset.objects.all()
+#     serializer_class = PasswordResetSerializer
+#     permission_classes = [AllowAny]
+#     lookup_field = 'token'
+#
+#
+#     def create(self, request):
+#         serializer = self.serializer_class(data=request.data)
+#         serializer.is_valid(raise_exception=True)
+#         email = serializer.validated_data['email']
+#
+#         try:
+#             user = USER.objects.get(email=email)
+#         except USER.DoesNotExist:
+#             return Response({'error': 'User with this email address does not exist.'}, status=status.HTTP_404_NOT_FOUND)
+#
+#         # Create a password reset instance
+#         token = get_random_string(length=32)
+#         password_reset = PasswordReset.objects.create(user=user, token=token)
+#
+#         # Send password reset email
+#         reset_link = request.build_absolute_uri(f"/auth/password-reset/{token}/")
+#
+#         send_passwordreset_verification_mail(user, reset_link, token)
+#
+#         return Response({'message': 'Password reset email sent.'}, status=status.HTTP_200_OK)
+#
+#     def retrieve(self, request, token=None):
+#         try:
+#             password_reset = PasswordReset.objects.get(token=token)
+#         except PasswordReset.DoesNotExist:
+#             return Response({'error': 'Invalid or expired token.'}, status=status.HTTP_400_BAD_REQUEST)
+#
+#         # Check if the token is still valid (e.g., not expired)
+#         expiration_time = password_reset.created_at + timedelta(hours=1)  # Token expires after 1 hour
+#         if timezone.now() > expiration_time:
+#             return Response({'error': 'Token has expired.'}, status=status.HTTP_400_BAD_REQUEST)
+#
+#         # Handle password reset confirmation and set new password for the user
+#
+#         return Response({'message': 'Password reset successful.'}, status=status.HTTP_200_OK)
+
 class PasswordResetViewSet(viewsets.ModelViewSet):
     queryset = PasswordReset.objects.all()
-    serializer_class = PasswordResetSerializer
+    serializer_class = PasswordResetCreateSerializer
     permission_classes = [AllowAny]
     lookup_field = 'token'
+    http_method_names = ['post']
+    throttle_classes = [UserRateThrottle]
 
-
-    def create(self, request):
+    def create(self, request, **kwargs):
         serializer = self.serializer_class(data=request.data)
         serializer.is_valid(raise_exception=True)
-        email = serializer.validated_data['email']
+        user = serializer.validated_data['user']
 
-        try:
-            user = USER.objects.get(email=email)
-        except USER.DoesNotExist:
-            return Response({'error': 'User with this email address does not exist.'}, status=status.HTTP_404_NOT_FOUND)
-
+        # generate a token
+        token = secrets.token_urlsafe(32)
         # Create a password reset instance
-        token = get_random_string(length=32)
         password_reset = PasswordReset.objects.create(user=user, token=token)
 
+        # generate a reset link
+        reset_link = request.build_absolute_uri(f"/auth/password-reset/{token}/confirm/")
+
         # Send password reset email
-        reset_link = request.build_absolute_uri(f"/auth/password-reset/{token}/")
+        try:
+            send_passwordreset_verification_mail(user, reset_link, token)
+        except (TypeError, ValueError, OverflowError) as e:
+            print(e)
+            # Handle email sending error here
+            return Response({'error': 'Failed to send password reset email.'},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-        send_passwordreset_verification_mail(user, reset_link, token)
+        return Response({'message': 'Password reset email sent successfully.'}, status=status.HTTP_200_OK)
 
-        return Response({'message': 'Password reset email sent.'}, status=status.HTTP_200_OK)
 
-    def retrieve(self, request, token=None):
+    @action(detail=True, methods=['post'])
+    def confirm(self, request, token=None, **kwargs):
         try:
             password_reset = PasswordReset.objects.get(token=token)
         except PasswordReset.DoesNotExist:
             return Response({'error': 'Invalid or expired token.'}, status=status.HTTP_400_BAD_REQUEST)
 
         # Check if the token is still valid (e.g., not expired)
-        expiration_time = password_reset.created_at + timedelta(hours=1)  # Token expires after 1 hour
+        # expiration_time = password_reset.created_at + timedelta(hours=1)
+        expiration_time = password_reset.expire_at
         if timezone.now() > expiration_time:
             return Response({'error': 'Token has expired.'}, status=status.HTTP_400_BAD_REQUEST)
 
         # Handle password reset confirmation and set new password for the user
+        serializer = PasswordResetConfirmSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        new_password = serializer.validated_data['new_password']
+
+        # Set new password for the user
+        user = password_reset.user
+        user.set_password(new_password)
+        user.save()
+
+        # Delete all password reset instances for the user
+        PasswordReset.objects.filter(user=user).delete()
 
         return Response({'message': 'Password reset successful.'}, status=status.HTTP_200_OK)
+
+

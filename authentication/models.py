@@ -80,6 +80,9 @@ class PasswordReset(models.Model):
     def __str__(self):
         return self.user.email
 
+    def get_absolute_url(self):
+        return reverse('password_reset_confirm', kwargs={'token': self.token})
+
 
 # @receiver(post_save, sender=settings.AUTH_USER_MODEL)
 # def create_auth_token(sender, instance=None, created=False, **kwargs):
