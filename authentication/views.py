@@ -123,49 +123,6 @@ class UserViewSet(viewsets.ModelViewSet):
                        'organization', 'country',)
 
 
-# class PasswordResetViewSet(viewsets.ModelViewSet):
-#     queryset = PasswordReset.objects.all()
-#     serializer_class = PasswordResetSerializer
-#     permission_classes = [AllowAny]
-#     lookup_field = 'token'
-#
-#
-#     def create(self, request):
-#         serializer = self.serializer_class(data=request.data)
-#         serializer.is_valid(raise_exception=True)
-#         email = serializer.validated_data['email']
-#
-#         try:
-#             user = USER.objects.get(email=email)
-#         except USER.DoesNotExist:
-#             return Response({'error': 'User with this email address does not exist.'}, status=status.HTTP_404_NOT_FOUND)
-#
-#         # Create a password reset instance
-#         token = get_random_string(length=32)
-#         password_reset = PasswordReset.objects.create(user=user, token=token)
-#
-#         # Send password reset email
-#         reset_link = request.build_absolute_uri(f"/auth/password-reset/{token}/")
-#
-#         send_passwordreset_verification_mail(user, reset_link, token)
-#
-#         return Response({'message': 'Password reset email sent.'}, status=status.HTTP_200_OK)
-#
-#     def retrieve(self, request, token=None):
-#         try:
-#             password_reset = PasswordReset.objects.get(token=token)
-#         except PasswordReset.DoesNotExist:
-#             return Response({'error': 'Invalid or expired token.'}, status=status.HTTP_400_BAD_REQUEST)
-#
-#         # Check if the token is still valid (e.g., not expired)
-#         expiration_time = password_reset.created_at + timedelta(hours=1)  # Token expires after 1 hour
-#         if timezone.now() > expiration_time:
-#             return Response({'error': 'Token has expired.'}, status=status.HTTP_400_BAD_REQUEST)
-#
-#         # Handle password reset confirmation and set new password for the user
-#
-#         return Response({'message': 'Password reset successful.'}, status=status.HTTP_200_OK)
-
 class PasswordResetViewSet(viewsets.ModelViewSet):
     queryset = PasswordReset.objects.all()
     serializer_class = PasswordResetCreateSerializer
