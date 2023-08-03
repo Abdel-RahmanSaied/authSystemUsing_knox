@@ -67,9 +67,7 @@ class UserSerializer(serializers.ModelSerializer):
         validate_password(value)
         return value
 
-    def create(self, validated_data):
-        user = USER.objects.create_user(**validated_data)
-        return user
+
 
     def update(self, instance, validated_data):
         # Create a dictionary to store the updated fields
@@ -87,6 +85,9 @@ class UserSerializer(serializers.ModelSerializer):
         user = super().update(instance, validated_data)
         return user
 
+    def create(self, validated_data):
+        user = USER.objects.create_user(**validated_data)
+        return user
 
 # class PasswordResetSerializer(serializers.Serializer):
 #     email = serializers.EmailField(write_only=True)
@@ -136,3 +137,8 @@ class PasswordResetConfirmSerializer(serializers.Serializer):
     def validate_new_password(self, value):
         validate_password(value)
         return value
+
+# class verifyAccountSerializer(serializers.Serializer):
+    # def validate(self, attrs):
+
+

@@ -9,8 +9,7 @@ from django.urls import reverse
 # from django_rest_passwordreset.signals import reset_password_token_created
 # from django.core.mail import send_mail
 from django.utils.translation import gettext_lazy as _
-from dateutil.relativedelta import relativedelta
-
+from django.utils import timezone
 
 
 # Create your models here.
@@ -66,6 +65,13 @@ class USER(AbstractBaseUser, PermissionsMixin):
     def __str__(self):
         return self.email
 
+    def verify_account(self):
+        try:
+            self.email_verified = True
+            return True
+        except Exception as e:
+            return False
+
     class Meta:
         verbose_name = 'User'
         verbose_name_plural = 'Users'
@@ -75,7 +81,7 @@ class PasswordReset(models.Model):
     user = models.ForeignKey(USER, on_delete=models.CASCADE)
     token = models.CharField(max_length=255)
     created_at = models.DateTimeField(auto_now_add=True)
-    expire_at = models.DateTimeField(default=datetime.datetime.now() + relativedelta(hours=1))
+    expire_at = models.DateTimeField(default=datetime.datetime.now() + timezone.timedelta(hours=1))
 
     def __str__(self):
         return self.user.email
@@ -83,8 +89,11 @@ class PasswordReset(models.Model):
     def get_absolute_url(self):
         return reverse('password_reset_confirm', kwargs={'token': self.token})
 
+class EmailVerification(models.Model):
+    user = models.ForeignKey(USER, on_delete=models.CASCADE)
+    key = models.CharField(_("Key"), max_length=64, db_index=True, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expire_at = models.DateTimeField(default=timezone.now() + timezone.timedelta(hours=1))
 
-# @receiver(post_save, sender=settings.AUTH_USER_MODEL)
-# def create_auth_token(sender, instance=None, created=False, **kwargs):
-#     if created:
-#         Token.objects.create(user=instance)
+    def __str__(self):
+        return str(self.user.email)

@@ -1,6 +1,9 @@
 from django.shortcuts import render
 from django.contrib.auth.signals import user_logged_in, user_logged_out
 from django.utils import timezone
+from datetime import timedelta
+from django.contrib.auth.tokens import default_token_generator
+
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
@@ -11,33 +14,25 @@ from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.throttling import UserRateThrottle
 
-# from rest_framework.authtoken.serializers import AuthTokenSerializer
-
 from knox.auth import TokenAuthentication
 from knox.models import AuthToken
 from knox.settings import knox_settings
-
-# import login view from knox
 from knox.views import LoginView as KnoxLoginView
+
 from .serializers import UserSerializer, AuthTokenSerializer, PasswordResetCreateSerializer, \
     PasswordResetConfirmSerializer
 
-from .models import USER, PasswordReset
+from .models import USER, PasswordReset, EmailVerification
 from .permissions import UserPermission
-from .emailSender import send_passwordreset_verification_mail
+from .emailSender import send_passwordreset_verification_mail, send_verification_mail
+from .forms import AdvancedLoginForm
 
 from django.contrib.auth import get_user_model
 # print("get_user_model()", get_user_model())
 
-from django.utils.crypto import get_random_string
-from django.core.mail import send_mail
-from datetime import timedelta
-from django.utils import timezone
 
 import secrets
-
-# forms
-from .forms import AdvancedLoginForm
+import urllib.parse
 
 
 
@@ -67,7 +62,7 @@ class LoginView(KnoxLoginView):
 
             print(request.META.get('HTTP_ACCEPT', ''))
             token_ttl = self.get_token_ttl()
-            instance, token = AuthToken.objects.create(user)
+            instance, token = AuthToken.objects.create(user, token_ttl)
             user_logged_in.send(sender=user.__class__, request=request, user=user)
             return Response({"token": token}, status=status.HTTP_201_CREATED)
         else:
@@ -122,6 +117,55 @@ class UserViewSet(viewsets.ModelViewSet):
     ordering_fields = ('username', 'email', 'first_name', 'last_name', 'phone', 'job_tittle', 'department',
                        'organization', 'country',)
 
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        account = serializer.save()
+
+        # generate a token
+        key = secrets.token_urlsafe(32)
+        # Create a password reset instance
+        emailVerification = EmailVerification.objects.create(user=account, key=key)
+
+        # generate a reset link
+        # verify_url = request.build_absolute_uri(f"/auth/users/{key}/verifyAccount/")
+        verify_url = f"http://127.0.0.1:8000/auth/users/{urllib.parse.quote(key)}/verifyAccount/"
+
+        # Send password reset email
+        try:
+            print(verify_url)
+            send_verification_mail(account, verify_url, key)
+        except (TypeError, ValueError, OverflowError) as e:
+            print(e)
+            # Handle email sending error here
+            return Response({'error': 'Failed to send password reset email.'},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+        # headers = self.get_success_headers(serializer.data)
+        # return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['get'],)
+    def verifyAccount(self, request, pk=None, *args, **kwargs):
+
+        try:
+            key = EmailVerification.objects.get(key=pk)
+        except EmailVerification.DoesNotExist:
+            return Response({'error': 'Invalid or expired token.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        expiration_time = key.expire_at
+        if timezone.now() > expiration_time:
+            return Response({'error': 'Token has expired.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        user = key.user
+        if not user.email_verified:
+            if user.verify_account():
+                key.delete()
+                return Response({"detail": "Account verification Successfully"}, status=status.HTTP_200_OK)
+            return Response({"error": "Failed to verify your account please try again"}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"error": "Account Already verified"}, status=status.HTTP_400_BAD_REQUEST)
+
 
 class PasswordResetViewSet(viewsets.ModelViewSet):
     queryset = PasswordReset.objects.all()
@@ -155,7 +199,6 @@ class PasswordResetViewSet(viewsets.ModelViewSet):
 
         return Response({'message': 'Password reset email sent successfully.'}, status=status.HTTP_200_OK)
 
-
     @action(detail=True, methods=['post'])
     def confirm(self, request, token=None, **kwargs):
         try:
@@ -183,5 +226,3 @@ class PasswordResetViewSet(viewsets.ModelViewSet):
         PasswordReset.objects.filter(user=user).delete()
 
         return Response({'message': 'Password reset successful.'}, status=status.HTTP_200_OK)
-
-
