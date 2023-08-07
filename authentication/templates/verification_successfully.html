@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Email Verified</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f3f5f8;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+        .container {
+            background-color: #ffffff;
+            border-radius: 10px;
+            padding: 30px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            max-width: 80%;
+        }
+        .success-icon {
+            color: #4CAF50;
+            font-size: 72px;
+        }
+        .success-message {
+            font-size: 24px;
+            margin-top: 20px;
+        }
+        .footer {
+            margin-top: 40px;
+            color: #777;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="success-icon">
+            &#10004;
+        </div>
+        <div class="success-message">
+            <p>Your email has been successfully verified !</p>
+            <p>Thank you for using our service.</p>
+        </div>
+        <div class="footer">
+            <p>&copy; 2023 {{ company_name }}. All rights reserved.</p>
+        </div>
+    </div>
+</body>
+</html>

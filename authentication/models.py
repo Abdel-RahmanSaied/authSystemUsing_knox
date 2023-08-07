@@ -68,8 +68,10 @@ class USER(AbstractBaseUser, PermissionsMixin):
     def verify_account(self):
         try:
             self.email_verified = True
+            self.save()
             return True
         except Exception as e:
+            print(e)
             return False
 
     class Meta:
@@ -79,21 +81,23 @@ class USER(AbstractBaseUser, PermissionsMixin):
 
 class PasswordReset(models.Model):
     user = models.ForeignKey(USER, on_delete=models.CASCADE)
-    token = models.CharField(max_length=255)
+    key = models.CharField(_("Key"), max_length=64, db_index=True, unique=True)
     created_at = models.DateTimeField(auto_now_add=True)
-    expire_at = models.DateTimeField(default=datetime.datetime.now() + timezone.timedelta(hours=1))
+    expires_at = models.DateTimeField(default=datetime.datetime.now() + timezone.timedelta(hours=1),
+                                      null=False, blank=False)
 
     def __str__(self):
         return self.user.email
 
     def get_absolute_url(self):
-        return reverse('password_reset_confirm', kwargs={'token': self.token})
+        return reverse('password_reset_confirm', kwargs={'key': self.key})
 
 class EmailVerification(models.Model):
     user = models.ForeignKey(USER, on_delete=models.CASCADE)
     key = models.CharField(_("Key"), max_length=64, db_index=True, unique=True)
     created_at = models.DateTimeField(auto_now_add=True)
-    expire_at = models.DateTimeField(default=timezone.now() + timezone.timedelta(hours=1))
+    expires_at = models.DateTimeField(default=datetime.datetime.now() + timezone.timedelta(hours=1),
+                                      null=False, blank=False)
 
     def __str__(self):
         return str(self.user.email)

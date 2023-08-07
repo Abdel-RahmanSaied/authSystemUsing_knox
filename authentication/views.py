@@ -28,7 +28,9 @@ from .emailSender import send_passwordreset_verification_mail, send_verification
 from .forms import AdvancedLoginForm
 
 from django.contrib.auth import get_user_model
+from django.conf import settings
 # print("get_user_model()", get_user_model())
+
 
 
 import secrets
@@ -53,7 +55,7 @@ class LoginView(KnoxLoginView):
             if token_limit_per_user is not None:
                 now = timezone.now()
                 token = AuthToken.objects.filter(user=user, expiry__gt=now)
-                # token = request.user.auth_token_set.filter(expiry__gt=now)
+                # key = request.user.auth_token_set.filter(expiry__gt=now)
                 if token.count() >= token_limit_per_user:
                     return Response(
                         {"error": "Maximum amount of tokens allowed per user exceeded."},
@@ -64,7 +66,7 @@ class LoginView(KnoxLoginView):
             token_ttl = self.get_token_ttl()
             instance, token = AuthToken.objects.create(user, token_ttl)
             user_logged_in.send(sender=user.__class__, request=request, user=user)
-            return Response({"token": token}, status=status.HTTP_201_CREATED)
+            return Response({"key": token}, status=status.HTTP_201_CREATED)
         else:
             if 'text/html' in request.META.get('HTTP_ACCEPT', ''):
                 return render(request, 'login.html', {'form': self.form(request.POST)})
@@ -122,23 +124,22 @@ class UserViewSet(viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         account = serializer.save()
 
-        # generate a token
+        # generate a key
         key = secrets.token_urlsafe(32)
         # Create a password reset instance
         emailVerification = EmailVerification.objects.create(user=account, key=key)
 
         # generate a reset link
-        # verify_url = request.build_absolute_uri(f"/auth/users/{key}/verifyAccount/")
-        verify_url = f"http://127.0.0.1:8000/auth/users/{urllib.parse.quote(key)}/verifyAccount/"
+        verify_url = request.build_absolute_uri(f"/auth/users/{urllib.parse.quote(key)}/verifyAccount/")
+        # verify_url = f"http://127.0.0.1:8000/auth/users/{urllib.parse.quote(key)}/verifyAccount/"
 
         # Send password reset email
         try:
-            print(verify_url)
             send_verification_mail(account, verify_url, key)
-        except (TypeError, ValueError, OverflowError) as e:
+        except Exception as e:
             print(e)
             # Handle email sending error here
-            return Response({'error': 'Failed to send password reset email.'},
+            return Response({'error': 'Failed to send password reset email.', 'detail': str(e)},
                             status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
@@ -146,32 +147,62 @@ class UserViewSet(viewsets.ModelViewSet):
         # return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
+    @action(detail=False, methods=['post'], permission_classes=[IsAuthenticated])
+    def resend_verification_email(self, request, *args, **kwargs):
+        # user = self.get_object()
+        user = request.user
+        if user.email_verified:
+            return Response({'error': 'Email already verified.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # generate a key
+        key = secrets.token_urlsafe(32)
+        # Create a EmailVerification instance
+        emailVerification = EmailVerification.objects.create(user=user, key=key)
+
+        # generate a reset link
+        verify_url = request.build_absolute_uri(f"/auth/users/{urllib.parse.quote(key)}/verifyAccount/")
+
+        try:
+            send_verification_mail(user, verify_url, key)
+        except Exception as e:
+            print(e)
+            # Handle email sending error here
+            return Response({'error': 'Failed to send password reset email.', 'detail': str(e)},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        return Response({'detail': 'Verification email sent.'}, status=status.HTTP_200_OK)
+
     @action(detail=True, methods=['get'],)
     def verifyAccount(self, request, pk=None, *args, **kwargs):
 
         try:
             key = EmailVerification.objects.get(key=pk)
         except EmailVerification.DoesNotExist:
-            return Response({'error': 'Invalid or expired token.'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'error': 'Invalid or expired key.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        expiration_time = key.expire_at
+        assert isinstance(key.expires_at, object)
+        expiration_time = key.expires_at
         if timezone.now() > expiration_time:
             return Response({'error': 'Token has expired.'}, status=status.HTTP_400_BAD_REQUEST)
 
         user = key.user
+        company_name = settings.DEFAULT_COMPANY_NAME
         if not user.email_verified:
             if user.verify_account():
-                key.delete()
-                return Response({"detail": "Account verification Successfully"}, status=status.HTTP_200_OK)
-            return Response({"error": "Failed to verify your account please try again"}, status=status.HTTP_400_BAD_REQUEST)
-        return Response({"error": "Account Already verified"}, status=status.HTTP_400_BAD_REQUEST)
+                # key.delete()
+                # return Response({"detail": "Account verification Successfully"}, status=status.HTTP_200_OK)
+                return render(request, 'verification_successfully.html', {'company_name': company_name})
+            # return Response({"error": "Failed to verify your account please try again"}, status=status.HTTP_400_BAD_REQUEST)
+            return render(request, 'verification_failed.html', {'company_name': company_name})
+        # return Response({"error": "Account Already verified"}, status=status.HTTP_400_BAD_REQUEST)
+        return render(request, 'already_verified.html', {'company_name': company_name})
 
 
 class PasswordResetViewSet(viewsets.ModelViewSet):
     queryset = PasswordReset.objects.all()
     serializer_class = PasswordResetCreateSerializer
     permission_classes = [AllowAny]
-    lookup_field = 'token'
+    lookup_field = 'key'
     http_method_names = ['post']
     throttle_classes = [UserRateThrottle]
 
@@ -180,35 +211,36 @@ class PasswordResetViewSet(viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         user = serializer.validated_data['user']
 
-        # generate a token
-        token = secrets.token_urlsafe(32)
+        # generate a key
+        key = secrets.token_urlsafe(32)
         # Create a password reset instance
-        password_reset = PasswordReset.objects.create(user=user, token=token)
+        password_reset = PasswordReset.objects.create(user=user, key=key)
 
         # generate a reset link
-        reset_link = request.build_absolute_uri(f"/auth/password-reset/{token}/confirm/")
+        reset_link = request.build_absolute_uri(f"/auth/password-reset/{key}/confirm/")
 
         # Send password reset email
         try:
-            send_passwordreset_verification_mail(user, reset_link, token)
-        except (TypeError, ValueError, OverflowError) as e:
+            send_passwordreset_verification_mail(user, reset_link, key)
+        except Exception as e:
             print(e)
             # Handle email sending error here
-            return Response({'error': 'Failed to send password reset email.'},
+            return Response({'error': 'Failed to send password reset email.', 'detail': str(e)},
                             status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         return Response({'message': 'Password reset email sent successfully.'}, status=status.HTTP_200_OK)
+
 
     @action(detail=True, methods=['post'])
     def confirm(self, request, token=None, **kwargs):
         try:
             password_reset = PasswordReset.objects.get(token=token)
         except PasswordReset.DoesNotExist:
-            return Response({'error': 'Invalid or expired token.'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'error': 'Invalid or expired key.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Check if the token is still valid (e.g., not expired)
+        # Check if the key is still valid (e.g., not expired)
         # expiration_time = password_reset.created_at + timedelta(hours=1)
-        expiration_time = password_reset.expire_at
+        expiration_time = password_reset.expires_at
         if timezone.now() > expiration_time:
             return Response({'error': 'Token has expired.'}, status=status.HTTP_400_BAD_REQUEST)
 

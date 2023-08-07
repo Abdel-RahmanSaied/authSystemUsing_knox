@@ -1,7 +1,8 @@
 from rest_framework import serializers
 from rest_framework.routers import DefaultRouter
 from django.urls import path, include
-from .views import LoginView, LogoutView, LogoutAllView, UserViewSet, PasswordResetViewSet
+from .views import LoginView,  UserViewSet, PasswordResetViewSet
+from knox.views import LogoutView, LogoutAllView
 
 # from .views import PasswordResetViewSet
 
@@ -18,7 +19,7 @@ urlpatterns = [
     path('logoutAll/', LogoutAllView.as_view(), name='logout-all'),
 
     # path('reset-password/', PasswordResetRequestView.as_view(), name='password_reset'),
-    # path('reset-password/<str:uidb64>/<str:token>/', PasswordResetConfirmView.as_view(), name='password_reset_confirm'),
+    # path('reset-password/<str:uidb64>/<str:key>/', PasswordResetConfirmView.as_view(), name='password_reset_confirm'),
 
 ]
 
