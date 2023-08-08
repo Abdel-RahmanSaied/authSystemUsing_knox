@@ -29,82 +29,56 @@ from .forms import AdvancedLoginForm
 
 from django.contrib.auth import get_user_model
 from django.conf import settings
-# print("get_user_model()", get_user_model())
-
-
 
 import secrets
 import urllib.parse
 
 
+def check_client_http_accept(request):
+    return 'text/html' in request.META.get('HTTP_ACCEPT', '')
+
 
 class LoginView(KnoxLoginView):
     authentication_classes = api_settings.DEFAULT_AUTHENTICATION_CLASSES
     permission_classes = (AllowAny,)
-    form = AdvancedLoginForm
-    # serializer_class = LoginSerializer
+    authentication_form = AdvancedLoginForm
     serializer_class = AuthTokenSerializer
 
     def post(self, request, format=None):
         token_limit_per_user = self.get_token_limit_per_user()
-        serializer = self.serializer_class(data=request.data)  # Use the LoginSerializer
+        serializer = self.serializer_class(data=request.data)  # Use the AuthTokenSerializer
 
-        if serializer.is_valid():
-            user = serializer.validated_data['user']
+        print(check_client_http_accept(request))
 
-            if token_limit_per_user is not None:
-                now = timezone.now()
-                token = AuthToken.objects.filter(user=user, expiry__gt=now)
-                # key = request.user.auth_token_set.filter(expiry__gt=now)
-                if token.count() >= token_limit_per_user:
-                    return Response(
-                        {"error": "Maximum amount of tokens allowed per user exceeded."},
-                        status=status.HTTP_403_FORBIDDEN
-                    )
+        if check_client_http_accept(request):
+            form = self.authentication_form(request, data=request.POST)
+            # if form.is_valid():
+            #     print("form is valid")
 
-            print(request.META.get('HTTP_ACCEPT', ''))
+            return render(request, 'login.html', {'form': form})
+
+        serializer.is_valid(raise_exception=True)
+        user = serializer.validated_data['user']
+
+        if token_limit_per_user is not None:
+            now = timezone.now()
+            token = AuthToken.objects.filter(user=user, expiry__gt=now)
+            if token.count() >= token_limit_per_user:
+                return Response(
+                    {"error": "Maximum amount of tokens allowed per user exceeded."},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+
             token_ttl = self.get_token_ttl()
             instance, token = AuthToken.objects.create(user, token_ttl)
             user_logged_in.send(sender=user.__class__, request=request, user=user)
             return Response({"key": token}, status=status.HTTP_201_CREATED)
-        else:
-            if 'text/html' in request.META.get('HTTP_ACCEPT', ''):
-                return render(request, 'login.html', {'form': self.form(request.POST)})
-            else:
-                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     def get(self, request, format=None):
-        if 'text/html' in request.META.get('HTTP_ACCEPT', ''):  # Check if HTML response is requested
-            form = self.form()
-            return render(request, 'login.html', {'form': form})
+        if check_client_http_accept(request):  # Check if HTML response is requested
+            return render(request, 'login.html', {'form': self.authentication_form()})
         else:  # API request, return JSON response
             return Response({"Message": "Method not allowed"}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
-
-
-class LogoutView(APIView):
-    authentication_classes = (TokenAuthentication,)
-    permission_classes = (IsAuthenticated,)
-
-    def post(self, request, format=None):
-        request._auth.delete()
-        user_logged_out.send(sender=request.user.__class__,
-                             request=request, user=request.user)
-        return Response(None, status=status.HTTP_204_NO_CONTENT)
-
-
-class LogoutAllView(APIView):
-    '''
-    Log the user out of all sessions
-    I.E. deletes all auth tokens for the user
-    '''
-    authentication_classes = (TokenAuthentication,)
-    permission_classes = (IsAuthenticated,)
-
-    def post(self, request, format=None):
-        request.user.auth_token_set.all().delete()
-        user_logged_out.send(sender=request.user.__class__,
-                             request=request, user=request.user)
-        return Response(None, status=status.HTTP_204_NO_CONTENT)
 
 
 class UserViewSet(viewsets.ModelViewSet):
@@ -142,7 +116,6 @@ class UserViewSet(viewsets.ModelViewSet):
             return Response({'error': 'Failed to send password reset email.', 'detail': str(e)},
                             status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-
         # headers = self.get_success_headers(serializer.data)
         # return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
@@ -172,7 +145,7 @@ class UserViewSet(viewsets.ModelViewSet):
 
         return Response({'detail': 'Verification email sent.'}, status=status.HTTP_200_OK)
 
-    @action(detail=True, methods=['get'],)
+    @action(detail=True, methods=['get'], )
     def verifyAccount(self, request, pk=None, *args, **kwargs):
 
         try:
@@ -190,11 +163,8 @@ class UserViewSet(viewsets.ModelViewSet):
         if not user.email_verified:
             if user.verify_account():
                 # key.delete()
-                # return Response({"detail": "Account verification Successfully"}, status=status.HTTP_200_OK)
                 return render(request, 'verification_successfully.html', {'company_name': company_name})
-            # return Response({"error": "Failed to verify your account please try again"}, status=status.HTTP_400_BAD_REQUEST)
             return render(request, 'verification_failed.html', {'company_name': company_name})
-        # return Response({"error": "Account Already verified"}, status=status.HTTP_400_BAD_REQUEST)
         return render(request, 'already_verified.html', {'company_name': company_name})
 
 
@@ -229,7 +199,6 @@ class PasswordResetViewSet(viewsets.ModelViewSet):
                             status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         return Response({'message': 'Password reset email sent successfully.'}, status=status.HTTP_200_OK)
-
 
     @action(detail=True, methods=['post'])
     def confirm(self, request, token=None, **kwargs):

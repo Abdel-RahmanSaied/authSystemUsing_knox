@@ -1,17 +1,22 @@
-# forms.py
-
 from django import forms
 from django.contrib.auth.forms import AuthenticationForm
 from django.contrib.auth import authenticate
-
+from django.contrib import messages
+from django.conf import settings
 
 class AdvancedLoginForm(AuthenticationForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        # Customize form field labels
+        # Customize authentication_form field labels
         self.fields['username'].label = 'Username or Email'
         self.fields['password'].label = 'Password'
+
+        self.fields['username'].widget.attrs.update(
+            {'class': 'authentication_form-control', 'placeholder': 'Username or Email', 'required': 'required'})
+        self.fields['password'].widget.attrs.update(
+            {'class': 'authentication_form-control', 'placeholder': 'Password', 'required': 'required'})
+
 
     def clean(self):
         cleaned_data = super().clean()
