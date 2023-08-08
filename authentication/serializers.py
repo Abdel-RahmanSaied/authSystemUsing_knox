@@ -89,22 +89,6 @@ class UserSerializer(serializers.ModelSerializer):
         user = USER.objects.create_user(**validated_data)
         return user
 
-# class PasswordResetSerializer(serializers.Serializer):
-#     email = serializers.EmailField(write_only=True)
-#
-#     class Meta:
-#         fields = ('email',)
-#
-#     def validate(self, attrs):
-#         email = attrs.get('email')
-#         try:
-#             user = USER.objects.get(email=email)
-#         except USER.DoesNotExist:
-#             raise serializers.ValidationError({'email': 'User with this email address does not exist.'})
-#
-#         attrs['user'] = user
-#         return attrs
-
 class PasswordResetCreateSerializer(serializers.Serializer):
     email = serializers.EmailField(write_only=True)
 
@@ -138,7 +122,28 @@ class PasswordResetConfirmSerializer(serializers.Serializer):
         validate_password(value)
         return value
 
-# class verifyAccountSerializer(serializers.Serializer):
-    # def validate(self, attrs):
+class ChangePasswordSerializer(serializers.Serializer):
+    old_password = serializers.CharField(write_only=True, style={'input_type': 'password'})
+    new_password = serializers.CharField(write_only=True, style={'input_type': 'password'})
+    confirm_password = serializers.CharField(write_only=True, style={'input_type': 'password'})
 
+    def validate(self, attrs):
+        old_password = attrs.get('old_password')
+        new_password = attrs.get('new_password')
+        confirm_password = attrs.get('confirm_password')
 
+        if new_password != confirm_password:
+            raise serializers.ValidationError({'confirm_password': 'Passwords do not match.'})
+
+        return attrs
+
+    def validate_new_password(self, value):
+        validate_password(value)
+        return value
+
+    def validate_old_password(self, value):
+        user = self.context['request'].user
+        if not user.check_password(value):
+            # raise serializers.ValidationError({'old_password': 'Old password is incorrect.'})
+            raise ValidationError({'old_password': 'Old password is incorrect.'})
+        return value

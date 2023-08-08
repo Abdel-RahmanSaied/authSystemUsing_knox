@@ -20,7 +20,7 @@ from knox.settings import knox_settings
 from knox.views import LoginView as KnoxLoginView
 
 from .serializers import UserSerializer, AuthTokenSerializer, PasswordResetCreateSerializer, \
-    PasswordResetConfirmSerializer
+    PasswordResetConfirmSerializer, ChangePasswordSerializer
 
 from .models import USER, PasswordReset, EmailVerification
 from .permissions import UserPermission
@@ -47,8 +47,6 @@ class LoginView(KnoxLoginView):
     def post(self, request, format=None):
         token_limit_per_user = self.get_token_limit_per_user()
         serializer = self.serializer_class(data=request.data)  # Use the AuthTokenSerializer
-
-        print(check_client_http_accept(request))
 
         if check_client_http_accept(request):
             form = self.authentication_form(request, data=request.POST)
@@ -167,6 +165,18 @@ class UserViewSet(viewsets.ModelViewSet):
             return render(request, 'verification_failed.html', {'company_name': company_name})
         return render(request, 'already_verified.html', {'company_name': company_name})
 
+    @action(detail=False, methods=['post'], permission_classes=[IsAuthenticated])
+    def change_password(self, request, *args, **kwargs):
+        user = request.user
+        serializer = ChangePasswordSerializer(data=request.data, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+        if not user.check_password(serializer.validated_data.get("old_password")):
+            return Response({"old_password": ["Wrong password."]}, status=status.HTTP_400_BAD_REQUEST)
+        user.change_password(serializer.validated_data.get("new_password"))
+        # user.save()
+        return Response({'detail': 'Password changed successfully.'}, status=status.HTTP_200_OK)
+
+
 
 class PasswordResetViewSet(viewsets.ModelViewSet):
     queryset = PasswordReset.objects.all()
@@ -201,9 +211,9 @@ class PasswordResetViewSet(viewsets.ModelViewSet):
         return Response({'message': 'Password reset email sent successfully.'}, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=['post'])
-    def confirm(self, request, token=None, **kwargs):
+    def confirm(self, request, key=None, **kwargs):
         try:
-            password_reset = PasswordReset.objects.get(token=token)
+            password_reset = PasswordReset.objects.get(key=key)
         except PasswordReset.DoesNotExist:
             return Response({'error': 'Invalid or expired key.'}, status=status.HTTP_400_BAD_REQUEST)
 

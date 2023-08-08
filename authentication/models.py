@@ -74,6 +74,15 @@ class USER(AbstractBaseUser, PermissionsMixin):
             print(e)
             return False
 
+    def change_password(self, password):
+        try:
+            self.set_password(password)
+            self.save()
+            return True
+        except Exception as e:
+            print(e)
+            return False
+
     class Meta:
         verbose_name = 'User'
         verbose_name_plural = 'Users'
