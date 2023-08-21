@@ -3,7 +3,9 @@ from django.contrib.auth import authenticate
 from django.contrib.auth import get_user_model
 from django.utils.translation import gettext_lazy as _
 from .validators import ValidationError
-from .models import PasswordReset
+from .generators import generate_verifyAccount_url
+from .emailSender import send_verification_mail
+from .models import PasswordReset, EmailVerification
 from django.contrib.auth.password_validation import validate_password
 
 USER = get_user_model()
@@ -87,7 +89,13 @@ class UserSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         user = USER.objects.create_user(**validated_data)
+        # user = USER(**validated_data)
+        url, key = generate_verifyAccount_url(request=self.context.get('request'))
+        email_sent = send_verification_mail(user, url, key)
+        if email_sent:
+            EmailVerification.objects.create(user=user, key=key)
         return user
+
 
 class PasswordResetCreateSerializer(serializers.Serializer):
     email = serializers.EmailField(write_only=True)

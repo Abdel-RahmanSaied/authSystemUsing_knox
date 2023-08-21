@@ -26,6 +26,7 @@ from .models import USER, PasswordReset, EmailVerification
 from .permissions import UserPermission
 from .emailSender import send_passwordreset_verification_mail, send_verification_mail
 from .forms import AdvancedLoginForm
+from .generators import generate_verifyAccount_url
 
 from django.contrib.auth import get_user_model
 from django.conf import settings
@@ -91,32 +92,32 @@ class UserViewSet(viewsets.ModelViewSet):
     ordering_fields = ('username', 'email', 'first_name', 'last_name', 'phone', 'job_tittle', 'department',
                        'organization', 'country',)
 
-    def create(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        account = serializer.save()
-
-        # generate a key
-        key = secrets.token_urlsafe(32)
-        # Create a password reset instance
-        emailVerification = EmailVerification.objects.create(user=account, key=key)
-
-        # generate a reset link
-        verify_url = request.build_absolute_uri(f"/auth/users/{urllib.parse.quote(key)}/verifyAccount/")
-        # verify_url = f"http://127.0.0.1:8000/auth/users/{urllib.parse.quote(key)}/verifyAccount/"
-
-        # Send password reset email
-        try:
-            send_verification_mail(account, verify_url, key)
-        except Exception as e:
-            print(e)
-            # Handle email sending error here
-            return Response({'error': 'Failed to send password reset email.', 'detail': str(e)},
-                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-        # headers = self.get_success_headers(serializer.data)
-        # return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    # def create(self, request, *args, **kwargs):
+    #     serializer = self.get_serializer(data=request.data)
+    #     serializer.is_valid(raise_exception=True)
+    #     account = serializer.save()
+    #
+    #     # generate a key
+    #     key = secrets.token_urlsafe(32)
+    #     # Create a password reset instance
+    #     emailVerification = EmailVerification.objects.create(user=account, key=key)
+    #
+    #     # generate a reset link
+    #     verify_url = request.build_absolute_uri(f"/auth/users/{urllib.parse.quote(key)}/verifyAccount/")
+    #     # verify_url = f"http://127.0.0.1:8000/auth/users/{urllib.parse.quote(key)}/verifyAccount/"
+    #
+    #     # Send password reset email
+    #     try:
+    #         send_verification_mail(account, verify_url, key)
+    #     except Exception as e:
+    #         print(e)
+    #         # Handle email sending error here
+    #         return Response({'error': 'Failed to send verification email.', 'detail': str(e)},
+    #                         status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    #
+    #     # headers = self.get_success_headers(serializer.data)
+    #     # return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+    #     return Response(serializer.data, status=status.HTTP_201_CREATED)
 
     @action(detail=False, methods=['post'], permission_classes=[IsAuthenticated])
     def resend_verification_email(self, request, *args, **kwargs):
@@ -125,23 +126,12 @@ class UserViewSet(viewsets.ModelViewSet):
         if user.email_verified:
             return Response({'error': 'Email already verified.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # generate a key
-        key = secrets.token_urlsafe(32)
-        # Create a EmailVerification instance
-        emailVerification = EmailVerification.objects.create(user=user, key=key)
-
-        # generate a reset link
-        verify_url = request.build_absolute_uri(f"/auth/users/{urllib.parse.quote(key)}/verifyAccount/")
-
-        try:
-            send_verification_mail(user, verify_url, key)
-        except Exception as e:
-            print(e)
-            # Handle email sending error here
-            return Response({'error': 'Failed to send password reset email.', 'detail': str(e)},
-                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-        return Response({'detail': 'Verification email sent.'}, status=status.HTTP_200_OK)
+        url, key = generate_verifyAccount_url(request=self.context.get('request'))
+        email_sent = send_verification_mail(user, url, key)
+        if email_sent:
+            EmailVerification.objects.create(user=user, key=key)
+            return Response({'detail': 'Verification email sent.'}, status=status.HTTP_200_OK)
+        return Response({'error': 'Failed to send verification email.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     @action(detail=True, methods=['get'], )
     def verifyAccount(self, request, pk=None, *args, **kwargs):
@@ -176,6 +166,12 @@ class UserViewSet(viewsets.ModelViewSet):
         # user.save()
         return Response({'detail': 'Password changed successfully.'}, status=status.HTTP_200_OK)
 
+    @action(methods=['post'], detail=False, permission_classes=[IsAuthenticated])
+    def deactivation(self, request, token=None, *args, **kwargs):
+        user = request.user
+        if user.deactivate_account():
+            return Response({'detail': 'Account deactivated successfully.'}, status=status.HTTP_204_NO_CONTENT)
+        return Response({'detail': 'Account deactivation failed.'}, status=status.HTTP_400_BAD_REQUEST)
 
 
 class PasswordResetViewSet(viewsets.ModelViewSet):
